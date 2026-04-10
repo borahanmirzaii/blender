@@ -3,7 +3,7 @@ name = "blender-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Core data structures for Blender Web: scene graph, meshes, materials, transforms"
+description = "Core data structures: scene graph, meshes, materials, transforms, ID system"
 
 [dependencies]
 glam = { workspace = true }
@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 bytemuck = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
+gltf = { workspace = true }

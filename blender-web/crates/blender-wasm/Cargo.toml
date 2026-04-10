@@ -3,7 +3,7 @@ name = "blender-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "wasm-bindgen API surface for Blender Web — browser-facing bindings"
+description = "WASM bridge — thin wasm-bindgen API surface for browser"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,15 +16,8 @@ serde_json = { workspace = true }
 serde-wasm-bindgen = "0.6"
 glam = { workspace = true }
 log = { workspace = true }
-web-sys = { version = "0.3", features = [
-    "console",
-    "Window",
-    "Document",
-    "HtmlCanvasElement",
-    "GpuDevice",
-    "GpuQueue",
-    "GpuBuffer",
-    "GpuTexture",
-] }
+web-sys = { version = "0.3", features = ["console"] }
 js-sys = "0.3"
-wasm-logger = "0.2"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false

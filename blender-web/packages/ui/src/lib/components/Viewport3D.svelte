@@ -1,167 +1,102 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { sceneStore } from '$lib/stores/scene.svelte';
-	import { loadBlenderWasm } from '$lib/wasm/loader';
 
 	let canvas: HTMLCanvasElement;
-	let overlayInfo = $state('Initializing WebGPU...');
-	let gpuAvailable = $state(false);
+	let info = $state('Initializing...');
 
-	// Camera orbit state
 	let isDragging = $state(false);
 	let isPanning = $state(false);
-	let lastMouseX = 0;
-	let lastMouseY = 0;
-	let cameraAzimuth = $state(Math.PI / 4);
-	let cameraElevation = $state(Math.PI / 6);
-	let cameraDistance = $state(10);
-	let cameraTarget = $state([0, 0, 0]);
+	let lastX = 0;
+	let lastY = 0;
 
-	onMount(async () => {
-		// Load WASM module
-		const wasm = await loadBlenderWasm();
-		await sceneStore.initFromWasm(wasm.scene);
-
-		// Try to initialize WebGPU
-		if (navigator.gpu) {
-			try {
-				const adapter = await navigator.gpu.requestAdapter();
-				if (adapter) {
-					const device = await adapter.requestDevice();
-					gpuAvailable = true;
-					overlayInfo = `WebGPU Ready | ${sceneStore.objects.length} objects`;
-					startRenderLoop(device);
-				} else {
-					overlayInfo = 'No GPU adapter — using software fallback';
-				}
-			} catch (e) {
-				overlayInfo = 'WebGPU init failed — using software fallback';
-			}
-		} else {
-			overlayInfo = 'WebGPU not supported — using Canvas2D fallback';
-			startFallbackRender();
-		}
+	onMount(() => {
+		startRenderer();
 	});
 
-	function startRenderLoop(device: GPUDevice) {
-		const ctx = canvas.getContext('webgpu');
-		if (!ctx) return;
-
-		const format = navigator.gpu.getPreferredCanvasFormat();
-		ctx.configure({ device, format, alphaMode: 'premultiplied' });
-
-		function frame() {
-			if (!canvas) return;
-
-			// Resize if needed
-			const dpr = window.devicePixelRatio || 1;
-			const displayWidth = Math.floor(canvas.clientWidth * dpr);
-			const displayHeight = Math.floor(canvas.clientHeight * dpr);
-			if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-				canvas.width = displayWidth;
-				canvas.height = displayHeight;
-			}
-
-			// Render dark viewport background with grid
-			const encoder = device.createCommandEncoder();
-			const textureView = ctx.getCurrentTexture().createView();
-			const pass = encoder.beginRenderPass({
-				colorAttachments: [{
-					view: textureView,
-					clearValue: { r: 0.18, g: 0.18, b: 0.18, a: 1.0 },
-					loadOp: 'clear',
-					storeOp: 'store',
-				}],
-			});
-			pass.end();
-			device.queue.submit([encoder.finish()]);
-
-			requestAnimationFrame(frame);
-		}
-
-		requestAnimationFrame(frame);
-	}
-
-	/** Canvas2D fallback when WebGPU is not available */
-	function startFallbackRender() {
+	async function startRenderer() {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
+		info = sceneStore.wasmReady
+			? `${sceneStore.objects.length} objects | Canvas2D`
+			: 'WASM loading...';
+
 		function frame() {
 			if (!canvas || !ctx) return;
-			canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
-			canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+
+			const dpr = window.devicePixelRatio || 1;
+			const w = Math.floor(canvas.clientWidth * dpr);
+			const h = Math.floor(canvas.clientHeight * dpr);
+			if (canvas.width !== w || canvas.height !== h) {
+				canvas.width = w;
+				canvas.height = h;
+			}
 
 			// Dark background
-			ctx.fillStyle = '#2d2d2d';
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			ctx.fillStyle = '#2a2a2a';
+			ctx.fillRect(0, 0, w, h);
 
 			// Grid
-			ctx.strokeStyle = '#3a3a3a';
+			const gridSize = 40 * dpr;
+			ctx.strokeStyle = '#333';
 			ctx.lineWidth = 1;
-			const gridSize = 40;
-			for (let x = 0; x < canvas.width; x += gridSize) {
-				ctx.beginPath();
-				ctx.moveTo(x, 0);
-				ctx.lineTo(x, canvas.height);
-				ctx.stroke();
+			const cx = w / 2, cy = h / 2;
+			for (let x = cx % gridSize; x < w; x += gridSize) {
+				ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
 			}
-			for (let y = 0; y < canvas.height; y += gridSize) {
-				ctx.beginPath();
-				ctx.moveTo(0, y);
-				ctx.lineTo(canvas.width, y);
-				ctx.stroke();
+			for (let y = cy % gridSize; y < h; y += gridSize) {
+				ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
 			}
 
-			// Center axes
-			const cx = canvas.width / 2;
-			const cy = canvas.height / 2;
+			// Axes
+			ctx.lineWidth = 2 * dpr;
+			ctx.strokeStyle = '#c44'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + 60 * dpr, cy); ctx.stroke();
+			ctx.strokeStyle = '#4c8'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - 60 * dpr); ctx.stroke();
 
-			// X axis (red)
-			ctx.strokeStyle = '#c44';
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			ctx.moveTo(cx, cy);
-			ctx.lineTo(cx + 80, cy);
-			ctx.stroke();
+			// Draw scene objects from WASM
+			const handle = sceneStore.handle;
+			if (handle) {
+				const count = handle.objectCount();
+				for (let i = 0; i < count; i++) {
+					const mat = handle.objectMatrix(i);
+					const tx = mat[12]; // translation X from column-major mat4
+					const ty = mat[13]; // translation Y
+					const name = handle.objectName(i);
+					const type = handle.objectType(i);
+					const isActive = i === sceneStore.activeIndex;
 
-			// Y axis (green)
-			ctx.strokeStyle = '#4c8';
-			ctx.beginPath();
-			ctx.moveTo(cx, cy);
-			ctx.lineTo(cx, cy - 80);
-			ctx.stroke();
+					const sx = cx + tx * gridSize;
+					const sy = cy - ty * gridSize;
 
-			// Draw objects as simple shapes
-			const scene = sceneStore;
-			for (const obj of scene.objects) {
-				const ox = cx + obj.position[0] * gridSize;
-				const oy = cy - obj.position[1] * gridSize;
+					if (type === 'mesh') {
+						// Draw cube/mesh as filled rect
+						const size = 20 * dpr;
+						ctx.fillStyle = isActive ? '#4b8bbf' : '#777';
+						ctx.strokeStyle = isActive ? '#6ab0e8' : '#555';
+						ctx.lineWidth = isActive ? 2 * dpr : 1;
+						ctx.fillRect(sx - size/2, sy - size/2, size, size);
+						ctx.strokeRect(sx - size/2, sy - size/2, size, size);
+					} else if (type === 'light') {
+						ctx.fillStyle = '#fd3';
+						ctx.beginPath(); ctx.arc(sx, sy, 6 * dpr, 0, Math.PI * 2); ctx.fill();
+					} else if (type === 'camera') {
+						ctx.fillStyle = '#8af';
+						ctx.beginPath();
+						ctx.moveTo(sx, sy - 8 * dpr);
+						ctx.lineTo(sx + 8 * dpr, sy + 6 * dpr);
+						ctx.lineTo(sx - 8 * dpr, sy + 6 * dpr);
+						ctx.closePath(); ctx.fill();
+					}
 
-				ctx.fillStyle = obj.selected ? '#4b8bbf' : '#888';
-				ctx.strokeStyle = obj.selected ? '#5a9fd4' : '#666';
-				ctx.lineWidth = obj.selected ? 2 : 1;
-
-				if (obj.type === 'mesh') {
-					ctx.fillRect(ox - 15, oy - 15, 30, 30);
-					ctx.strokeRect(ox - 15, oy - 15, 30, 30);
-				} else {
-					ctx.beginPath();
-					ctx.arc(ox, oy, 8, 0, Math.PI * 2);
-					ctx.fill();
-					ctx.stroke();
+					// Label
+					ctx.fillStyle = isActive ? '#fff' : '#999';
+					ctx.font = `${11 * dpr}px sans-serif`;
+					ctx.fillText(name, sx + 14 * dpr, sy + 4 * dpr);
 				}
 
-				// Label
-				ctx.fillStyle = '#ccc';
-				ctx.font = '11px sans-serif';
-				ctx.fillText(obj.name, ox + 18, oy + 4);
+				info = `${count} objects | Canvas2D (WebGPU in Phase 2)`;
 			}
-
-			// Info text
-			ctx.fillStyle = '#666';
-			ctx.font = '11px monospace';
-			ctx.fillText(`Objects: ${scene.objects.length} | Frame: ${scene.frameCurrent}`, 10, canvas.height - 10);
 
 			requestAnimationFrame(frame);
 		}
@@ -175,119 +110,84 @@
 		} else if (e.button === 0) {
 			isDragging = true;
 		}
-		lastMouseX = e.clientX;
-		lastMouseY = e.clientY;
+		lastX = e.clientX;
+		lastY = e.clientY;
 	}
 
 	function onMouseMove(e: MouseEvent) {
-		const dx = e.clientX - lastMouseX;
-		const dy = e.clientY - lastMouseY;
-		lastMouseX = e.clientX;
-		lastMouseY = e.clientY;
+		const dx = e.clientX - lastX;
+		const dy = e.clientY - lastY;
+		lastX = e.clientX;
+		lastY = e.clientY;
+
+		const handle = sceneStore.handle;
+		if (!handle) return;
 
 		if (isDragging) {
-			cameraAzimuth += dx * 0.01;
-			cameraElevation = Math.max(-1.5, Math.min(1.5, cameraElevation + dy * 0.01));
+			handle.cameraOrbit(dx, dy);
 		} else if (isPanning) {
-			cameraTarget[0] -= dx * 0.02;
-			cameraTarget[1] += dy * 0.02;
+			handle.cameraPan(dx, dy);
 		}
 	}
 
-	function onMouseUp() {
-		isDragging = false;
-		isPanning = false;
-	}
+	function onMouseUp() { isDragging = false; isPanning = false; }
 
 	function onWheel(e: WheelEvent) {
 		e.preventDefault();
-		cameraDistance *= 1 + e.deltaY * 0.001;
-		cameraDistance = Math.max(0.5, Math.min(100, cameraDistance));
+		sceneStore.handle?.cameraZoom(-e.deltaY);
+	}
+
+	function onClick(e: MouseEvent) {
+		// Simple object picking: click near an object to select it
+		const handle = sceneStore.handle;
+		if (!handle || isDragging) return;
+
+		const rect = canvas.getBoundingClientRect();
+		const dpr = window.devicePixelRatio || 1;
+		const mx = (e.clientX - rect.left) * dpr;
+		const my = (e.clientY - rect.top) * dpr;
+		const cx = canvas.width / 2;
+		const cy = canvas.height / 2;
+		const gridSize = 40 * dpr;
+
+		let closest = -1;
+		let closestDist = 30 * dpr; // max click distance
+
+		const count = handle.objectCount();
+		for (let i = 0; i < count; i++) {
+			const mat = handle.objectMatrix(i);
+			const sx = cx + mat[12] * gridSize;
+			const sy = cy - mat[13] * gridSize;
+			const dist = Math.hypot(mx - sx, my - sy);
+			if (dist < closestDist) {
+				closestDist = dist;
+				closest = i;
+			}
+		}
+
+		sceneStore.selectObject(closest >= 0 ? closest : null);
 	}
 </script>
 
-<div class="viewport-container">
+<div class="viewport">
 	<canvas
 		bind:this={canvas}
 		onmousedown={onMouseDown}
 		onmousemove={onMouseMove}
 		onmouseup={onMouseUp}
 		onmouseleave={onMouseUp}
+		onclick={onClick}
 		onwheel={onWheel}
 	></canvas>
-
-	<!-- Viewport overlay -->
-	<div class="viewport-overlay">
-		<span class="overlay-info">{overlayInfo}</span>
-		<div class="gizmo">
-			<span class="axis-x">X</span>
-			<span class="axis-y">Y</span>
-			<span class="axis-z">Z</span>
-		</div>
-	</div>
-
-	<!-- Viewport header -->
-	<div class="viewport-header">
-		<select>
-			<option>Solid</option>
-			<option>Wireframe</option>
-			<option>Material Preview</option>
-			<option>Rendered</option>
-		</select>
-	</div>
+	<div class="info">{info}</div>
 </div>
 
 <style>
-	.viewport-container {
-		position: relative;
-		width: 100%;
-		height: 100%;
-	}
-
-	canvas {
-		width: 100%;
-		height: 100%;
-		display: block;
-		cursor: crosshair;
-	}
-
-	.viewport-overlay {
-		position: absolute;
-		bottom: 8px;
-		left: 8px;
-		right: 8px;
-		display: flex;
-		justify-content: space-between;
+	.viewport { position: relative; width: 100%; height: 100%; }
+	canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+	.info {
+		position: absolute; bottom: 6px; left: 8px;
+		font: 11px var(--font-mono); color: var(--text-muted);
 		pointer-events: none;
-	}
-
-	.overlay-info {
-		font-size: 11px;
-		color: var(--text-muted);
-		font-family: var(--font-mono);
-	}
-
-	.gizmo {
-		display: flex;
-		gap: 6px;
-		font-size: 11px;
-		font-weight: bold;
-	}
-
-	.axis-x { color: #e44; }
-	.axis-y { color: #4c8; }
-	.axis-z { color: #48f; }
-
-	.viewport-header {
-		position: absolute;
-		top: 6px;
-		left: 6px;
-	}
-
-	.viewport-header select {
-		font-size: 11px;
-		padding: 2px 6px;
-		background: rgba(30, 30, 30, 0.8);
-		backdrop-filter: blur(4px);
 	}
 </style>

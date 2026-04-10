@@ -88,3 +88,4 @@ blendcache_*
 *.blend1
 *.blend2
 blender-web/target/
+packages/ui/static/wasm/

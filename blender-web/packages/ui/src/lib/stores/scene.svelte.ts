@@ -1,137 +1,87 @@
-/// Reactive scene state — bridges WASM SceneHandle with Svelte's reactivity.
-/// Uses Svelte 5 runes ($state, $derived) for fine-grained reactivity.
+/**
+ * Scene store — bridges WASM SceneHandle with Svelte 5 reactivity.
+ *
+ * The WASM module owns the actual scene data (Rust memory).
+ * This store mirrors a lightweight JS representation for UI binding.
+ */
+
+import type { SceneHandle } from '/wasm/blender_wasm.js';
 
 export interface SceneObject {
 	index: number;
 	name: string;
-	type: 'mesh' | 'light' | 'camera' | 'empty';
+	type: string;
 	visible: boolean;
-	selected: boolean;
-	position: [number, number, number];
-	scale: [number, number, number];
-}
-
-export interface SceneMaterial {
-	index: number;
-	name: string;
-	baseColor: [number, number, number];
-	metallic: number;
-	roughness: number;
-}
-
-interface SceneState {
-	objects: SceneObject[];
-	materials: SceneMaterial[];
-	activeObjectIndex: number | null;
-	frameCurrent: number;
-	frameStart: number;
-	frameEnd: number;
-	fps: number;
-	wasmReady: boolean;
+	meshIndex: number;
+	materialIndex: number;
 }
 
 function createSceneStore() {
-	let state = $state<SceneState>({
-		objects: [],
-		materials: [],
-		activeObjectIndex: null,
-		frameCurrent: 1,
-		frameStart: 1,
-		frameEnd: 250,
-		fps: 24,
-		wasmReady: false,
-	});
+	let objects = $state<SceneObject[]>([]);
+	let activeIndex = $state<number | null>(null);
+	let wasmReady = $state(false);
+	let handle: SceneHandle | null = null;
 
-	// WASM handle reference (not reactive — opaque pointer)
-	let wasmScene: any = null;
+	function syncFromWasm() {
+		if (!handle) return;
+		const count = handle.objectCount();
+		const objs: SceneObject[] = [];
+		for (let i = 0; i < count; i++) {
+			objs.push({
+				index: i,
+				name: handle.objectName(i),
+				type: handle.objectType(i),
+				visible: handle.objectVisible(i),
+				meshIndex: handle.objectMeshIndex(i),
+				materialIndex: handle.objectMaterialIndex(i),
+			});
+		}
+		objects = objs;
+	}
 
 	return {
-		get objects() { return state.objects; },
-		get materials() { return state.materials; },
-		get activeObjectIndex() { return state.activeObjectIndex; },
+		get objects() { return objects; },
+		get activeIndex() { return activeIndex; },
 		get activeObject() {
-			if (state.activeObjectIndex === null) return null;
-			return state.objects[state.activeObjectIndex] ?? null;
+			return activeIndex !== null ? objects[activeIndex] ?? null : null;
 		},
-		get frameCurrent() { return state.frameCurrent; },
-		get frameStart() { return state.frameStart; },
-		get frameEnd() { return state.frameEnd; },
-		get fps() { return state.fps; },
-		get wasmReady() { return state.wasmReady; },
+		get wasmReady() { return wasmReady; },
+		get handle() { return handle; },
 
-		/** Initialize from WASM default scene */
-		async initFromWasm(SceneHandle: any) {
-			wasmScene = SceneHandle.defaultScene();
-			state.wasmReady = true;
-			this.syncFromWasm();
+		init(h: SceneHandle) {
+			handle = h;
+			wasmReady = true;
+			syncFromWasm();
 		},
 
-		/** Sync JS state from WASM scene (call after mutations) */
-		syncFromWasm() {
-			if (!wasmScene) return;
-			const count = wasmScene.objectCount();
-			const objects: SceneObject[] = [];
-			for (let i = 0; i < count; i++) {
-				objects.push({
-					index: i,
-					name: wasmScene.objectName(i),
-					type: 'mesh', // simplified — full impl would check data type
-					visible: true,
-					selected: i === state.activeObjectIndex,
-					position: [0, 0, 0],
-					scale: [1, 1, 1],
-				});
-			}
-			state.objects = objects;
+		selectObject(idx: number | null) {
+			activeIndex = idx;
 		},
 
-		/** Add a primitive to the scene */
-		addPrimitive(type: string, name: string) {
-			if (!wasmScene) return;
-			const idx = wasmScene.addPrimitive(type, name);
-			state.activeObjectIndex = idx;
-			this.syncFromWasm();
+		addPrimitive(kind: string, name: string): number | null {
+			if (!handle) return null;
+			const idx = handle.addPrimitive(kind, name);
+			activeIndex = idx;
+			syncFromWasm();
+			return idx;
 		},
 
-		/** Select an object */
-		selectObject(index: number | null) {
-			state.activeObjectIndex = index;
-			state.objects = state.objects.map((obj, i) => ({
-				...obj,
-				selected: i === index,
-			}));
+		deleteObject(idx: number) {
+			if (!handle) return;
+			handle.deleteObject(idx);
+			if (activeIndex === idx) activeIndex = null;
+			syncFromWasm();
 		},
 
-		/** Delete the active object */
-		deleteActive() {
-			if (state.activeObjectIndex === null || !wasmScene) return;
-			wasmScene.deleteObject(state.activeObjectIndex);
-			state.activeObjectIndex = null;
-			this.syncFromWasm();
+		setPosition(idx: number, x: number, y: number, z: number) {
+			handle?.setPosition(idx, x, y, z);
 		},
 
-		/** Set object position */
-		setPosition(index: number, x: number, y: number, z: number) {
-			if (!wasmScene) return;
-			wasmScene.setPosition(index, x, y, z);
-			if (state.objects[index]) {
-				state.objects[index].position = [x, y, z];
-			}
-		},
-
-		/** Set animation frame */
-		setFrame(frame: number) {
-			state.frameCurrent = Math.max(state.frameStart, Math.min(state.frameEnd, frame));
-		},
-
-		/** Get WASM scene handle for direct GPU operations */
-		getWasmScene() { return wasmScene; },
-
-		/** Export scene as JSON */
 		exportJson(): string | null {
-			if (!wasmScene) return null;
-			return wasmScene.toJson();
+			return handle?.toJson() ?? null;
 		},
+
+		sync() { syncFromWasm(); },
 	};
 }
 
