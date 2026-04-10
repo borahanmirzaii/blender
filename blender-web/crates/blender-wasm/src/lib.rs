@@ -2,7 +2,6 @@ use blender_core::material::Material;
 use blender_core::mesh::Mesh;
 use blender_core::object::ObjectData;
 use blender_core::scene::Scene;
-use blender_core::transform::Transform;
 use glam::Vec3;
 use wasm_bindgen::prelude::*;
 

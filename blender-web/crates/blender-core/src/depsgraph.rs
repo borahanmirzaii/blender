@@ -84,7 +84,7 @@ impl Depsgraph {
         let mut queue: VecDeque<usize> = in_degree
             .iter()
             .enumerate()
-            .filter(|(_, &d)| d == 0)
+            .filter(|(_, d)| **d == 0)
             .map(|(i, _)| i)
             .collect();
 
