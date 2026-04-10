@@ -1,5 +1,18 @@
 # Blender Web: Rust/WASM + Svelte + AI Architecture
 
+> **Research-driven architecture** — based on deep analysis of Blender's
+> 2.96M LOC codebase, its design patterns, and the Rust/WASM/Svelte ecosystem.
+
+## Documentation Index
+
+| Document | Purpose |
+|----------|---------|
+| [01-RESEARCH.md](docs/01-RESEARCH.md) | Full research report: Blender internals, ecosystem analysis, prior art |
+| [02-PATTERN-MAPPING.md](docs/02-PATTERN-MAPPING.md) | How each Blender C++ pattern maps to Rust idioms |
+| [03-ARCHITECTURE-DECISIONS.md](docs/03-ARCHITECTURE-DECISIONS.md) | 10 ADRs with trade-off analysis |
+| [04-SPRINT-PLAN.md](docs/04-SPRINT-PLAN.md) | 6-phase sprint plan with task tracking |
+| [05-MODULE-DESIGN.md](docs/05-MODULE-DESIGN.md) | Crate architecture, data flow, compile targets |
+
 ## Vision
 
 Transform Blender's core capabilities into a modern, browser-native 3D platform
