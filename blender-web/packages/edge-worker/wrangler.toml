@@ -1,0 +1,27 @@
+name = "blender-web-edge"
+main = "src/worker.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+# KV namespace for scene storage
+[[kv_namespaces]]
+binding = "SCENE_STORE"
+id = "your-kv-namespace-id"
+
+# R2 bucket for assets
+[[r2_buckets]]
+binding = "ASSET_BUCKET"
+bucket_name = "blender-web-assets"
+
+# Queue for render jobs
+[[queues.producers]]
+binding = "RENDER_QUEUE"
+queue = "render-jobs"
+
+# Durable Objects for collaboration
+[durable_objects]
+bindings = [
+  { name = "COLLAB_ROOM", class_name = "CollabRoom" }
+]

@@ -1,0 +1,73 @@
+/* Blender Web — Dark theme inspired by Blender's native UI */
+:root {
+	--bg-primary: #1d1d1d;
+	--bg-secondary: #2d2d2d;
+	--bg-tertiary: #3d3d3d;
+	--bg-header: #303030;
+	--text-primary: #e0e0e0;
+	--text-secondary: #a0a0a0;
+	--text-muted: #707070;
+	--accent: #4b8bbf;
+	--accent-hover: #5a9fd4;
+	--border: #404040;
+	--selection: #4b7baf33;
+	--danger: #c44;
+	--success: #4c8;
+	--warning: #ca4;
+	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+	--font-ui: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html, body {
+	height: 100%;
+	overflow: hidden;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	font-family: var(--font-ui);
+	font-size: 13px;
+}
+
+button {
+	font-family: inherit;
+	font-size: inherit;
+	cursor: pointer;
+	border: 1px solid var(--border);
+	background: var(--bg-secondary);
+	color: var(--text-primary);
+	padding: 4px 12px;
+	border-radius: 4px;
+}
+
+button:hover {
+	background: var(--bg-tertiary);
+}
+
+input, select, textarea {
+	font-family: inherit;
+	font-size: inherit;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	border: 1px solid var(--border);
+	padding: 4px 8px;
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--bg-tertiary);
+	border-radius: 3px;
+}

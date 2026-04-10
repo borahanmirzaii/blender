@@ -1,0 +1,13 @@
+[package]
+name = "blender-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebGPU rendering abstraction — shader compilation, pipeline management, draw calls"
+
+[dependencies]
+blender-core = { workspace = true }
+glam = { workspace = true }
+bytemuck = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
